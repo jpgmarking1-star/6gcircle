@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>원주율과 원의 넓이 시뮬레이션</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Noto Sans KR -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    @keyframes bounceHint {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+    .bounce-hint {
+      animation: bounceHint 1.3s infinite ease-in-out;
+    }
+    @keyframes pulseGlow {
+      0%, 100% { transform: scale(1); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+      50% { transform: scale(1.03); box-shadow: 0 10px 15px -3px rgba(244, 63, 94, 0.4); }
+    }
+    .pulse-glow {
+      animation: pulseGlow 1.8s infinite;
+    }
+    .tray-scroll::-webkit-scrollbar {
+      height: 6px;
+    }
+    .tray-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 9999px;
+    }
+    .tray-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    .tray-scroll::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen flex flex-col antialiased">
+
+  <!-- 상단 간결 헤더 -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="w-8 h-8 rounded-lg bg-rose-500 text-white flex items-center justify-center font-black text-xs shadow">3.14</span>
+        <h1 class="text-base sm:text-lg font-black text-slate-800">원주율과 원의 넓이</h1>
+      </div>
+
+      <!-- 메인 탭 전환 -->
+      <nav class="flex items-center bg-slate-100 p-1 rounded-xl">
+        <button id="tab-btn-pi" onclick="switchTab('pi')" class="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-rose-600 shadow-sm transition">
+          <i class="fa-solid fa-tape"></i>
+          <span>1. 원주율 (털실 감기)</span>
+        </button>
+        <button id="tab-btn-area" onclick="switchTab('area')" class="flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 transition">
+          <i class="fa-solid fa-shapes"></i>
+          <span>2. 원의 넓이 변형</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- 메인 뷰 컨테이너 -->
+  <main class="flex-1 flex flex-col max-w-6xl w-full mx-auto p-3 sm:p-5 gap-4">
+
+    <!-- ========================================================================= -->
+    <!-- [탭 1] 원주율 : 지름 길이 조정 & 지름 실 클릭 감기 & 담기 기능 -->
+    <!-- ========================================================================= -->
+    <section id="section-pi" class="flex-1 flex flex-col gap-4">
+      
+      <!-- 상단 컨트롤: 지름(원 크기) 조절 바 -->
+      <div class="bg-white px-4 py-2.5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+          <span class="text-xs font-black text-slate-700 shrink-0 flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-left-right text-rose-500"></i>
+            <span>원 지름(털실 길이) 조절:</span>
+          </span>
+          <input id="diameter-slider" type="range" min="6" max="15" step="0.5" value="10" oninput="changeDiameter(this.value)" class="w-full max-w-xs h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-rose-500">
+          <span id="diameter-disp" class="text-xs font-black px-2.5 py-1 rounded-md bg-rose-50 text-rose-600 shrink-0">지름 10 cm</span>
+        </div>
+        <div class="text-[11px] text-slate-400 font-medium hidden sm:block">
+          * 원의 크기가 바뀌어도 항상 <strong>3번 감고 조금</strong> 남습니다.
+        </div>
+      </div>
+
+      <!-- 본문 영역: 메인 캔버스 + 우측 패널 -->
+      <div class="flex flex-col lg:flex-row gap-3 min-h-[480px]">
+        
+        <!-- 캔버스 컨테이너 -->
+        <div id="pi-canvas-wrapper" class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex flex-col items-center justify-center min-h-[480px] w-full" style="min-height: 480px;">
+          
+          <!-- 클릭 힌트 뱃지 -->
+          <div id="pi-click-hint" class="absolute top-4 z-10 bounce-hint pointer-events-none">
+            <div class="bg-rose-600 text-white text-xs sm:text-sm font-bold px-4 py-1.5 rounded-full shadow-lg flex items-center gap-1.5">
+              <i class="fa-solid fa-hand-pointer"></i>
+              <span id="pi-hint-text">지름에 있는 털실을 클릭해 보세요!</span>
+            </div>
+          </div>
+
+          <!-- 2D Canvas -->
+          <canvas id="pi-canvas" class="block w-full h-full cursor-pointer"></canvas>
+
+          <!-- 하단 플로팅 버튼들 -->
+          <div class="absolute bottom-4 left-4 right-4 flex items-center justify-between pointer-events-none z-10">
+            <button onclick="resetPiSimulation()" class="pointer-events-auto bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow transition flex items-center gap-1.5">
+              <i class="fa-solid fa-rotate-left"></i>
+              <span>처음부터 다시 감기</span>
+            </button>
+
+            <!-- 감기 실행 버튼 -->
+            <button id="pi-direct-btn" onclick="triggerNextYarn()" class="pointer-events-auto bg-rose-500 hover:bg-rose-600 text-white text-xs sm:text-sm font-black px-5 py-2.5 rounded-xl shadow-lg transition flex items-center gap-2 pulse-glow">
+              <i class="fa-solid fa-arrow-turn-up"></i>
+              <span id="pi-direct-btn-text">지름 털실 감기</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 우측 상태 패널 -->
+        <div class="w-full lg:w-80 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col justify-between gap-3">
+          <div class="space-y-3">
+            <!-- 횟수 카운터 -->
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
+              <span class="text-xs font-bold text-slate-400 block mb-0.5">감은 횟수</span>
+              <div id="wound-count-text" class="text-3xl sm:text-4xl font-black text-slate-800">
+                0 <span class="text-base text-slate-500 font-bold">번 감음</span>
+              </div>
+              <div id="wound-sub-text" class="text-xs font-bold text-rose-500 mt-1">
+                지름 길이만큼 실을 감아보세요
+              </div>
+            </div>
+
+            <!-- 실 상태 카드 목록 -->
+            <div class="space-y-1.5">
+              <div id="card-yarn-1" class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 transition opacity-40">
+                <div class="flex items-center gap-2">
+                  <span class="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-sm"></span>
+                  <span class="text-xs font-bold text-slate-700">1번째 실 (1 지름)</span>
+                </div>
+                <span id="badge-yarn-1" class="text-xs font-bold text-slate-400">대기 중</span>
+              </div>
+
+              <div id="card-yarn-2" class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 transition opacity-40">
+                <div class="flex items-center gap-2">
+                  <span class="w-3.5 h-3.5 rounded-full bg-amber-500 shadow-sm"></span>
+                  <span class="text-xs font-bold text-slate-700">2번째 실 (2 지름)</span>
+                </div>
+                <span id="badge-yarn-2" class="text-xs font-bold text-slate-400">대기 중</span>
+              </div>
+
+              <div id="card-yarn-3" class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 transition opacity-40">
+                <div class="flex items-center gap-2">
+                  <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-sm"></span>
+                  <span class="text-xs font-bold text-slate-700">3번째 실 (3 지름)</span>
+                </div>
+                <span id="badge-yarn-3" class="text-xs font-bold text-slate-400">대기 중</span>
+              </div>
+
+              <div id="card-yarn-4" class="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-slate-50 transition opacity-40">
+                <div class="flex items-center gap-2">
+                  <span class="w-3.5 h-3.5 rounded-full bg-purple-500 shadow-sm"></span>
+                  <span class="text-xs font-bold text-slate-700">남은 자투리</span>
+                </div>
+                <span id="badge-yarn-4" class="text-xs font-bold text-slate-400">약 0.14배</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 담기 버튼 & 요약 카드 -->
+          <div class="space-y-2">
+            <button id="add-to-tray-btn" onclick="addCurrentCircleToTray()" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-black rounded-xl shadow-md transition flex items-center justify-center gap-2">
+              <i class="fa-solid fa-box-archive text-base"></i>
+              <span>이 원을 관찰대에 담기</span>
+            </button>
+
+            <div class="bg-gradient-to-r from-rose-500 to-indigo-600 text-white p-3 rounded-xl shadow text-center space-y-0.5">
+              <div class="text-[10px] font-bold text-rose-200 uppercase tracking-wider">발견한 사실</div>
+              <div class="text-sm sm:text-base font-black tracking-tight">
+                원둘레 = 지름 × 3.14
+              </div>
+              <div class="text-[10px] text-rose-100">
+                (지름 3배 + 0.14배 남음)
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- 관찰 트레이: 학생들이 담은 원들이 차곡차곡 모이는 공간 -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-black">
+              <i class="fa-solid fa-shapes"></i>
+            </span>
+            <div>
+              <h3 class="text-xs sm:text-sm font-black text-slate-800">우리가 관찰대에 담은 원들</h3>
+              <p class="text-[11px] text-slate-400">원 크기가 달라도 항상 지름에 3배 하고 조금 더하면 둘레가 됩니다!</p>
+            </div>
+          </div>
+          <span id="tray-count-badge" class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">0개 보관 중</span>
+        </div>
+
+        <div id="circle-tray-container" class="flex gap-3 overflow-x-auto pb-2 tray-scroll min-h-[140px] items-center">
+          <div id="tray-empty-hint" class="w-full text-center py-8 text-slate-400 text-xs font-medium border-2 border-dashed border-slate-200 rounded-xl">
+            <i class="fa-solid fa-circle-plus text-2xl text-slate-300 mb-1 block"></i>
+            위에서 털실을 감은 뒤 <strong class="text-emerald-600">'이 원을 관찰대에 담기'</strong> 버튼을 눌러보세요!
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- [탭 2] 원의 넓이 : 직사각형 & 직각삼각형 변형 -->
+    <!-- ========================================================================= -->
+    <section id="section-area" class="flex-1 flex flex-col gap-3 h-full hidden">
+      
+      <!-- 상단 컨트롤 바 -->
+      <div class="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        
+        <!-- 변형 방식 선택 (직사각형 vs 직각삼각형) -->
+        <div class="flex items-center bg-slate-100 p-1 rounded-xl">
+          <button id="submode-rect-btn" onclick="setAreaMode('rect')" class="px-3 py-1.5 text-xs font-black rounded-lg bg-white text-indigo-600 shadow-sm transition flex items-center gap-1.5">
+            <i class="fa-solid fa-vector-square"></i>
+            <span>직사각형 변형</span>
+          </button>
+          <button id="submode-tri-btn" onclick="setAreaMode('tri')" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-play rotate-[-90deg]"></i>
+            <span>직각삼각형 변형</span>
+          </button>
+        </div>
+
+        <!-- 조각 수 선택 버튼들 -->
+        <div id="slice-selector-container" class="flex items-center gap-1.5">
+          <span class="text-xs font-black text-slate-700 mr-1">조각 수:</span>
+          <div id="slice-buttons" class="flex gap-1 flex-wrap"></div>
+        </div>
+
+        <!-- 펼치기 슬라이더 & 천천히 재생 버튼 -->
+        <div class="flex items-center gap-2 flex-1 max-w-sm justify-end">
+          <input id="area-slider" type="range" min="0" max="1" step="0.005" value="0" oninput="onAreaSlider(this.value)" class="w-32 sm:w-40 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600">
+          
+          <button id="slow-play-btn" onclick="playSlowTransform()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center gap-1.5 shrink-0">
+            <i class="fa-solid fa-play"></i>
+            <span>천천히 펼치기</span>
+          </button>
+
+          <button onclick="resetAreaTransform()" class="p-1.5 text-slate-400 hover:text-slate-700 transition" title="원 모양으로 되돌리기">
+            <i class="fa-solid fa-rotate-left"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- 캔버스 영역 -->
+      <div id="area-canvas-wrapper" class="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden flex items-center justify-center min-h-[500px] w-full" style="min-height: 500px;">
+        <canvas id="area-canvas" class="block w-full h-full cursor-pointer"></canvas>
+
+        <!-- 하단 실시간 공식 바 -->
+        <div class="absolute bottom-4 z-10 pointer-events-none">
+          <div id="area-formula-bar" class="bg-slate-900/90 text-white backdrop-blur px-5 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 sm:gap-3 text-xs sm:text-sm font-bold border border-white/10 pointer-events-auto">
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- 스크립트 로직 -->
+  <!-- ========================================================================= -->
+  <script>
+    /* -------------------------------------------------------------
+     * [1] 탭 전환
+     * ------------------------------------------------------------- */
+    let currentTab = 'pi';
+    function switchTab(tab) {
+      currentTab = tab;
+      const secPi = document.getElementById('section-pi');
+      const secArea = document.getElementById('section-area');
+      const btnPi = document.getElementById('tab-btn-pi');
+      const btnArea = document.getElementById('tab-btn-area');
+
+      if (tab === 'pi') {
+        secPi.classList.remove('hidden');
+        secArea.classList.add('hidden');
+        btnPi.className = "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-rose-600 shadow-sm transition";
+        btnArea.className = "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 transition";
+        refreshPiCanvas();
+      } else {
+        secPi.classList.add('hidden');
+        secArea.classList.remove('hidden');
+        btnArea.className = "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold bg-white text-indigo-600 shadow-sm transition";
+        btnPi.className = "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-bold text-slate-600 hover:text-slate-900 transition";
+        buildSliceButtons();
+        refreshAreaCanvas();
+      }
+    }
+
+    /* -------------------------------------------------------------
+     * [2] 탭 1 : 원주율 탐구
+     * ------------------------------------------------------------- */
+    const piCanvas = document.getElementById('pi-canvas');
+    const piCtx = piCanvas.getContext('2d');
+
+    let circleDiameterCm = 10.0;
+    const TWO_RAD = 2.0;
+    const yarnSteps = [
+      { id: 1, name: '1번째 실', color: '#f43f5e', shadow: '#9f1239', spanRad: 2.0 },
+      { id: 2, name: '2번째 실', color: '#f59e0b', shadow: '#b45309', spanRad: 2.0 },
+      { id: 3, name: '3번째 실', color: '#10b981', shadow: '#047857', spanRad: 2.0 },
+      { id: 4, name: '남은 자투리', color: '#a855f7', shadow: '#6b21a8', spanRad: (Math.PI * 2) - 6.0 }
+    ];
+
+    let currentStepIndex = 0;
+    let isMoving = false;
+    let moveProgress = 0.0;
+    let moveStartTime = 0;
+    const MOVE_DURATION = 750;
+
+    let savedCircles = [];
+
+    function resizePiCanvas() {
+      const parent = document.getElementById('pi-canvas-wrapper');
+      const w = parent ? parent.clientWidth : 800;
+      const h = parent ? parent.clientHeight : 480;
+      const effectiveW = Math.max(320, w || 800);
+      const effectiveH = Math.max(350, h || 480);
+      const dpr = window.devicePixelRatio || 1;
+
+      piCanvas.width = effectiveW * dpr;
+      piCanvas.height = effectiveH * dpr;
+      piCanvas.style.width = effectiveW + 'px';
+      piCanvas.style.height = effectiveH + 'px';
+
+      piCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function refreshPiCanvas() {
+      requestAnimationFrame(() => {
+        resizePiCanvas();
+        renderPi();
+      });
+      setTimeout(() => {
+        resizePiCanvas();
+        renderPi();
+      }, 50);
+    }
+
+    function changeDiameter(val) {
+      circleDiameterCm = parseFloat(val);
+      document.getElementById('diameter-disp').textContent = `지름 ${circleDiameterCm.toFixed(1)} cm`;
+      renderPi();
+    }
+
+    /* 털실 직선 그리기 */
+    function drawYarnLine(ctx, x1, y1, x2, y2, color, shadowColor, thickness = 16) {
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      if (len <= 1) return;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+
+      ctx.save();
+      ctx.translate(x1, y1);
+      ctx.rotate(angle);
+
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+
+      ctx.lineCap = 'round';
+      ctx.lineWidth = thickness;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(len, 0);
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+
+      // 꼬임 빗살 결
+      ctx.lineWidth = Math.max(1.8, thickness * 0.2);
+      ctx.strokeStyle = shadowColor;
+      const step = thickness * 0.55;
+      for (let x = 4; x < len - 4; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x - 3, -thickness * 0.38);
+        ctx.lineTo(x + 3, thickness * 0.38);
+        ctx.stroke();
+      }
+
+      // 상단 하이라이트
+      ctx.lineWidth = Math.max(1.2, thickness * 0.16);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.beginPath();
+      ctx.moveTo(3, -thickness * 0.25);
+      ctx.lineTo(len - 3, -thickness * 0.25);
+      ctx.stroke();
+
+      // 양 끝 방울
+      [0, len].forEach(px => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(px, 0, thickness * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    /* 털실 호 그리기 */
+    function drawYarnArc(ctx, cx, cy, radius, startAngle, endAngle, color, shadowColor, thickness = 16) {
+      const arcLen = (endAngle - startAngle) * radius;
+      if (arcLen <= 0.5) return;
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+
+      ctx.lineCap = 'round';
+      ctx.lineWidth = thickness;
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, startAngle, endAngle);
+      ctx.stroke();
+
+      ctx.shadowColor = 'transparent';
+
+      // 꼬임 무늬
+      ctx.lineWidth = Math.max(1.8, thickness * 0.18);
+      ctx.strokeStyle = shadowColor;
+      const stepAngle = (thickness * 0.55) / radius;
+      for (let a = startAngle + stepAngle * 0.5; a < endAngle - stepAngle * 0.5; a += stepAngle) {
+        const cos = Math.cos(a);
+        const sin = Math.sin(a);
+        const px1 = cx + cos * radius - (-sin) * (thickness * 0.35);
+        const py1 = cy + sin * radius - (cos) * (thickness * 0.35);
+        const px2 = cx + cos * radius + (-sin) * (thickness * 0.35);
+        const py2 = cy + sin * radius + (cos) * (thickness * 0.35);
+
+        ctx.beginPath();
+        ctx.moveTo(px1, py1);
+        ctx.lineTo(px2, py2);
+        ctx.stroke();
+      }
+
+      // 하이라이트
+      ctx.lineWidth = Math.max(1.2, thickness * 0.15);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius - thickness * 0.22, startAngle, endAngle);
+      ctx.stroke();
+
+      // 양 끝 방울
+      [startAngle, endAngle].forEach(ang => {
+        const bx = cx + Math.cos(ang) * radius;
+        const by = cy + Math.sin(ang) * radius;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(bx, by, thickness * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    /* 지름 -> 원둘레 이동 보간 */
+    function drawMorphingYarn(ctx, cx, cy, radius, startAngle, spanAngle, color, shadowColor, progress) {
+      const t = 1 - Math.pow(1 - progress, 3);
+      const numSegments = 24;
+      const points = [];
+
+      const isStub = spanAngle < 1.0;
+      const stubFactor = isStub ? (spanAngle / TWO_RAD) : 1.0;
+
+      for (let i = 0; i <= numSegments; i++) {
+        const u = i / numSegments;
+        const lineX = cx - (radius * stubFactor) + (2 * radius * stubFactor) * u;
+        const lineY = cy;
+
+        const targetAng = startAngle + spanAngle * u;
+        const arcX = cx + Math.cos(targetAng) * radius;
+        const arcY = cy + Math.sin(targetAng) * radius;
+
+        const curX = lineX + (arcX - lineX) * t;
+        const curY = lineY + (arcY - lineY) * t;
+        points.push({ x: curX, y: curY });
+      }
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 4;
+
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 16;
+      ctx.strokeStyle = color;
+
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function renderPi() {
+      const parent = document.getElementById('pi-canvas-wrapper');
+      const W = parent ? parent.clientWidth : 800;
+      const H = parent ? parent.clientHeight : 480;
+      if (W === 0 || H === 0) return;
+
+      piCtx.clearRect(0, 0, W, H);
+
+      const cx = W * 0.5;
+      const cy = H * 0.5;
+      const baseR = Math.min(W * 0.32, H * 0.36);
+      const radius = Math.max(45, baseR * (circleDiameterCm / 10.0));
+
+      // 1. 바탕 원
+      piCtx.save();
+      piCtx.beginPath();
+      piCtx.arc(cx, cy, radius, 0, Math.PI * 2);
+      piCtx.fillStyle = '#f8fafc';
+      piCtx.shadowColor = 'rgba(0, 0, 0, 0.08)';
+      piCtx.shadowBlur = 12;
+      piCtx.fill();
+
+      piCtx.lineWidth = 3.5;
+      piCtx.strokeStyle = '#94a3b8';
+      piCtx.stroke();
+      piCtx.restore();
+
+      // 2. 중심점
+      piCtx.beginPath();
+      piCtx.arc(cx, cy, 5, 0, Math.PI * 2);
+      piCtx.fillStyle = '#475569';
+      piCtx.fill();
+
+      // 3. 지름 점선 가이드 (원 전체를 가로지르는 지름만 명확하게 표시)
+      piCtx.save();
+      piCtx.beginPath();
+      piCtx.setLineDash([5, 5]);
+      piCtx.strokeStyle = '#cbd5e1';
+      piCtx.lineWidth = 2;
+      piCtx.moveTo(cx - radius, cy);
+      piCtx.lineTo(cx + radius, cy);
+      piCtx.stroke();
+      piCtx.restore();
+
+      // 4. 이미 감긴 실들
+      let accumulatedAngle = -Math.PI / 2;
+      for (let i = 0; i < currentStepIndex; i++) {
+        const step = yarnSteps[i];
+        drawYarnArc(piCtx, cx, cy, radius, accumulatedAngle, accumulatedAngle + step.spanRad, step.color, step.shadow, 16);
+        accumulatedAngle += step.spanRad;
+      }
+
+      // 5. 이동 중인 실
+      if (isMoving && currentStepIndex < 4) {
+        const step = yarnSteps[currentStepIndex];
+        drawMorphingYarn(piCtx, cx, cy, radius, accumulatedAngle, step.spanRad, step.color, step.shadow, moveProgress);
+      }
+      // 6. 지름에 대기 중인 실
+      else if (!isMoving && currentStepIndex < 4) {
+        const step = yarnSteps[currentStepIndex];
+        const isStub = step.id === 4;
+        const stubFactor = isStub ? (step.spanRad / TWO_RAD) : 1.0;
+        const x1 = cx - radius * stubFactor;
+        const x2 = cx + radius * stubFactor;
+
+        drawYarnLine(piCtx, x1, cy, x2, cy, step.color, step.shadow, 16);
+
+        piCtx.save();
+        const labelText = isStub ? '남은 자투리 실 (지름의 약 0.14배)' : `지름(${circleDiameterCm.toFixed(1)}cm) 길이의 털실`;
+        piCtx.font = 'bold 13px Noto Sans KR, sans-serif';
+        piCtx.textAlign = 'center';
+        piCtx.textBaseline = 'bottom';
+
+        const tw = piCtx.measureText(labelText).width;
+        piCtx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        piCtx.fillRect(cx - tw / 2 - 6, cy - 32, tw + 12, 22);
+
+        piCtx.fillStyle = step.color;
+        piCtx.fillText(labelText, cx, cy - 14);
+        piCtx.restore();
+      }
+    }
+
+    function triggerNextYarn() {
+      if (isMoving) return;
+      if (currentStepIndex >= 4) {
+        resetPiSimulation();
+        return;
+      }
+
+      isMoving = true;
+      moveProgress = 0.0;
+      moveStartTime = performance.now();
+
+      animateYarnMove();
+    }
+
+    function animateYarnMove() {
+      const now = performance.now();
+      const elapsed = now - moveStartTime;
+      moveProgress = Math.min(1.0, elapsed / MOVE_DURATION);
+
+      renderPi();
+
+      if (moveProgress < 1.0) {
+        requestAnimationFrame(animateYarnMove);
+      } else {
+        isMoving = false;
+        currentStepIndex++;
+        updatePiUI();
+        renderPi();
+
+        if (currentStepIndex === 4) {
+          confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } });
+        }
+      }
+    }
+
+    function updatePiUI() {
+      const countText = document.getElementById('wound-count-text');
+      const subText = document.getElementById('wound-sub-text');
+      const directBtnText = document.getElementById('pi-direct-btn-text');
+      const hintText = document.getElementById('pi-hint-text');
+
+      if (currentStepIndex === 1) {
+        countText.innerHTML = `1 <span class="text-base text-slate-500 font-bold">번 감음</span>`;
+        subText.textContent = `1번째 지름 실이 둘레를 감았습니다`;
+        directBtnText.textContent = `2번째 지름 털실 감기`;
+        hintText.textContent = `다음 지름 털실을 클릭하세요!`;
+        document.getElementById('card-yarn-1').classList.remove('opacity-40');
+        document.getElementById('badge-yarn-1').textContent = `감김 완료!`;
+        document.getElementById('badge-yarn-1').className = `text-xs font-black text-rose-600`;
+      } else if (currentStepIndex === 2) {
+        countText.innerHTML = `2 <span class="text-base text-slate-500 font-bold">번 감음</span>`;
+        subText.textContent = `2번째 지름 실이 이어 감겼습니다`;
+        directBtnText.textContent = `3번째 지름 털실 감기`;
+        document.getElementById('card-yarn-2').classList.remove('opacity-40');
+        document.getElementById('badge-yarn-2').textContent = `감김 완료!`;
+        document.getElementById('badge-yarn-2').className = `text-xs font-black text-amber-600`;
+      } else if (currentStepIndex === 3) {
+        countText.innerHTML = `3 <span class="text-base text-slate-500 font-bold">번 감음</span>`;
+        subText.textContent = `어라? 3번 감았는데 조금 남았네요!`;
+        directBtnText.textContent = `남은 자투리 실 감기`;
+        hintText.textContent = `남은 틈새에 자투리 실을 채워보세요!`;
+        document.getElementById('card-yarn-3').classList.remove('opacity-40');
+        document.getElementById('badge-yarn-3').textContent = `감김 완료!`;
+        document.getElementById('badge-yarn-3').className = `text-xs font-black text-emerald-600`;
+      } else if (currentStepIndex === 4) {
+        countText.innerHTML = `3.14 <span class="text-base text-slate-500 font-bold">배 감김</span>`;
+        subText.textContent = `원 1바퀴를 완벽하게 둘렀습니다!`;
+        directBtnText.textContent = `처음부터 다시 감기`;
+        hintText.textContent = `아래 '관찰대에 담기'를 눌러 보관해보세요!`;
+        document.getElementById('card-yarn-4').classList.remove('opacity-40');
+        document.getElementById('badge-yarn-4').textContent = `채움 완료!`;
+        document.getElementById('badge-yarn-4').className = `text-xs font-black text-purple-600`;
+      }
+    }
+
+    function resetPiSimulation() {
+      currentStepIndex = 0;
+      isMoving = false;
+      moveProgress = 0.0;
+
+      document.getElementById('wound-count-text').innerHTML = `0 <span class="text-base text-slate-500 font-bold">번 감음</span>`;
+      document.getElementById('wound-sub-text').textContent = `지름 길이만큼 실을 감아보세요`;
+      document.getElementById('pi-direct-btn-text').textContent = `지름 털실 감기`;
+      document.getElementById('pi-hint-text').textContent = `지름에 있는 털실을 클릭해 보세요!`;
+
+      for (let i = 1; i <= 4; i++) {
+        const card = document.getElementById(`card-yarn-${i}`);
+        const badge = document.getElementById(`badge-yarn-${i}`);
+        card.classList.add('opacity-40');
+        badge.textContent = i === 4 ? '약 0.14배' : '대기 중';
+        badge.className = 'text-xs font-bold text-slate-400';
+      }
+
+      renderPi();
+    }
+
+    piCanvas.addEventListener('click', () => {
+      triggerNextYarn();
+    });
+
+    /* -------------------------------------------------------------
+     * [3] 관찰 트레이에 원 담기 로직
+     * ------------------------------------------------------------- */
+    function addCurrentCircleToTray() {
+      const diam = circleDiameterCm;
+      const circ = (diam * 3.14).toFixed(1);
+
+      const circleItem = {
+        id: Date.now(),
+        diameter: diam,
+        circumference: circ,
+        steps: currentStepIndex
+      };
+
+      savedCircles.push(circleItem);
+      updateTrayUI();
+
+      confetti({ particleCount: 40, spread: 50, origin: { y: 0.85 } });
+    }
+
+    function updateTrayUI() {
+      const container = document.getElementById('circle-tray-container');
+      const badge = document.getElementById('tray-count-badge');
+      badge.textContent = `${savedCircles.length}개 보관 중`;
+
+      if (savedCircles.length === 0) {
+        container.innerHTML = `
+          <div id="tray-empty-hint" class="w-full text-center py-8 text-slate-400 text-xs font-medium border-2 border-dashed border-slate-200 rounded-xl">
+            <i class="fa-solid fa-circle-plus text-2xl text-slate-300 mb-1 block"></i>
+            위에서 털실을 감은 뒤 <strong class="text-emerald-600">'이 원을 관찰대에 담기'</strong> 버튼을 눌러보세요!
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      savedCircles.forEach((item, idx) => {
+        const card = document.createElement('div');
+        card.className = "flex-shrink-0 bg-slate-50 border-2 border-emerald-200 rounded-2xl p-3 shadow-sm hover:shadow-md transition flex items-center gap-3 min-w-[280px]";
+
+        const canvasId = `mini-canvas-${item.id}`;
+        card.innerHTML = `
+          <div class="w-20 h-20 bg-white rounded-xl border border-slate-200 flex items-center justify-center relative overflow-hidden shadow-inner">
+            <canvas id="${canvasId}" width="160" height="160" class="w-full h-full"></canvas>
+          </div>
+          <div class="flex-1 space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black text-slate-800">원 #${idx + 1}</span>
+              <button onclick="removeCircleFromTray(${item.id})" class="text-slate-400 hover:text-rose-500 text-xs p-1" title="삭제">
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+            </div>
+            <div class="text-[11px] text-slate-600">
+              지름: <strong class="text-rose-600">${item.diameter.toFixed(1)} cm</strong>
+            </div>
+            <div class="text-[11px] text-slate-600">
+              둘레: <strong class="text-indigo-600">약 ${item.circumference} cm</strong>
+            </div>
+            <div class="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded inline-block">
+              지름 × 3 + 조금 더 (약 3.14배)
+            </div>
+          </div>
+        `;
+        container.appendChild(card);
+
+        requestAnimationFrame(() => {
+          renderMiniCircle(canvasId, item);
+        });
+      });
+    }
+
+    function removeCircleFromTray(id) {
+      savedCircles = savedCircles.filter(c => c.id !== id);
+      updateTrayUI();
+    }
+
+    function renderMiniCircle(canvasId, item) {
+      const c = document.getElementById(canvasId);
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      const w = 160;
+      const h = 160;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h / 2;
+      const r = Math.min(cx - 16, (item.diameter / 16) * (cx - 16) + 24);
+
+      // 바탕 원
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#f1f5f9';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.stroke();
+
+      // 중심점 & 지름 점선 가이드 (반지름 대신 지름을 안내)
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#64748b';
+      ctx.fill();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(cx - r, cy);
+      ctx.lineTo(cx + r, cy);
+      ctx.stroke();
+      ctx.restore();
+
+      // 둘러싸인 털실 호들
+      let accAng = -Math.PI / 2;
+      const maxSteps = Math.max(item.steps, 4);
+      for (let i = 0; i < maxSteps; i++) {
+        const step = yarnSteps[i];
+        drawYarnArc(ctx, cx, cy, r, accAng, accAng + step.spanRad, step.color, step.shadow, 8);
+        accAng += step.spanRad;
+      }
+    }
+
+    /* -------------------------------------------------------------
+     * [4] 탭 2 : 원의 넓이 (직사각형 & 직각삼각형 변형 엔진)
+     * ------------------------------------------------------------- */
+    const areaCanvas = document.getElementById('area-canvas');
+    const areaCtx = areaCanvas.getContext('2d');
+
+    let areaMode = 'rect'; // 'rect' | 'tri'
+    let rectSlices = 16;   // 4, 8, 16, 32, 64, 128, 256
+    let triLayers = 16;    // 8, 16, 32, 64
+    let areaProgress = 0.0; // 0.0 ~ 1.0
+    let isSlowPlaying = false;
+    let slowPlayStartTime = 0;
+    const SLOW_DURATION = 2300;
+
+    function resizeAreaCanvas() {
+      const parent = document.getElementById('area-canvas-wrapper');
+      const w = parent ? parent.clientWidth : 800;
+      const h = parent ? parent.clientHeight : 500;
+      const effectiveW = Math.max(320, w || 800);
+      const effectiveH = Math.max(350, h || 500);
+      const dpr = window.devicePixelRatio || 1;
+
+      areaCanvas.width = effectiveW * dpr;
+      areaCanvas.height = effectiveH * dpr;
+      areaCanvas.style.width = effectiveW + 'px';
+      areaCanvas.style.height = effectiveH + 'px';
+
+      areaCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function refreshAreaCanvas() {
+      requestAnimationFrame(() => {
+        resizeAreaCanvas();
+        renderArea();
+      });
+      setTimeout(() => {
+        resizeAreaCanvas();
+        renderArea();
+      }, 50);
+    }
+
+    function setAreaMode(mode) {
+      areaMode = mode;
+      const rectBtn = document.getElementById('submode-rect-btn');
+      const triBtn = document.getElementById('submode-tri-btn');
+
+      if (mode === 'rect') {
+        rectBtn.className = "px-3 py-1.5 text-xs font-black rounded-lg bg-white text-indigo-600 shadow-sm transition flex items-center gap-1.5";
+        triBtn.className = "px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5";
+      } else {
+        triBtn.className = "px-3 py-1.5 text-xs font-black rounded-lg bg-white text-indigo-600 shadow-sm transition flex items-center gap-1.5";
+        rectBtn.className = "px-3 py-1.5 text-xs font-bold rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center gap-1.5";
+      }
+      buildSliceButtons();
+      renderArea();
+    }
+
+    /* 조각 수 선택 버튼 */
+    function buildSliceButtons() {
+      const container = document.getElementById('slice-buttons');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (areaMode === 'rect') {
+        const options = [4, 8, 16, 32, 64, 128, 256];
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          const isSelected = opt === rectSlices;
+          btn.className = isSelected 
+            ? "px-2 py-1 text-xs font-black rounded-lg border-2 border-indigo-600 bg-indigo-50 text-indigo-700"
+            : "px-2 py-1 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600";
+          btn.textContent = opt;
+          btn.onclick = () => {
+            rectSlices = opt;
+            buildSliceButtons();
+            renderArea();
+          };
+          container.appendChild(btn);
+        });
+      } else {
+        const options = [8, 16, 32, 64];
+        options.forEach(opt => {
+          const btn = document.createElement('button');
+          const isSelected = opt === triLayers;
+          btn.className = isSelected 
+            ? "px-2.5 py-1 text-xs font-black rounded-lg border-2 border-indigo-600 bg-indigo-50 text-indigo-700"
+            : "px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600";
+          btn.textContent = `${opt}겹`;
+          btn.onclick = () => {
+            triLayers = opt;
+            buildSliceButtons();
+            renderArea();
+          };
+          container.appendChild(btn);
+        });
+      }
+    }
+
+    function onAreaSlider(val) {
+      areaProgress = parseFloat(val);
+      renderArea();
+    }
+
+    function resetAreaTransform() {
+      isSlowPlaying = false;
+      areaProgress = 0.0;
+      document.getElementById('area-slider').value = 0;
+      renderArea();
+    }
+
+    function playSlowTransform() {
+      isSlowPlaying = true;
+      areaProgress = 0.0;
+      slowPlayStartTime = performance.now();
+      stepSlowTransform();
+    }
+
+    function stepSlowTransform() {
+      if (!isSlowPlaying) return;
+      const now = performance.now();
+      const elapsed = now - slowPlayStartTime;
+      const t = Math.min(1.0, elapsed / SLOW_DURATION);
+
+      const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      areaProgress = ease;
+      document.getElementById('area-slider').value = areaProgress;
+      renderArea();
+
+      if (t < 1.0) {
+        requestAnimationFrame(stepSlowTransform);
+      } else {
+        isSlowPlaying = false;
+        areaProgress = 1.0;
+        document.getElementById('area-slider').value = 1.0;
+        renderArea();
+        confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } });
+      }
+    }
+
+    areaCanvas.addEventListener('click', () => {
+      if (isSlowPlaying) return;
+      if (areaProgress < 0.5) {
+        playSlowTransform();
+      } else {
+        resetAreaTransform();
+      }
+    });
+
+    function renderArea() {
+      const parent = document.getElementById('area-canvas-wrapper');
+      const W = parent ? parent.clientWidth : 800;
+      const H = parent ? parent.clientHeight : 500;
+      if (W === 0 || H === 0) return;
+
+      areaCtx.clearRect(0, 0, W, H);
+
+      if (areaMode === 'rect') {
+        renderRectMode(W, H);
+      } else {
+        renderTriangleMode(W, H);
+      }
+      updateAreaFormula();
+    }
+
+    /* 1. 직사각형 변형 렌더링 */
+    function renderRectMode(W, H) {
+      const R = Math.min(W * 0.18, H * 0.26);
+      const cx = W * 0.5;
+      const cy = H * 0.46;
+      const N = rectSlices;
+      const dTheta = (Math.PI * 2) / N;
+      const p = areaProgress;
+
+      const baseW = (Math.PI * R) / (N / 2);
+      const totalW = Math.PI * R;
+      const startX = cx - totalW / 2;
+
+      for (let i = 0; i < N; i++) {
+        const isBlue = i < N / 2;
+        const origAngle = i * dTheta - Math.PI / 2;
+
+        const isEven = i % 2 === 0;
+        const color = isBlue ? (isEven ? '#0284c7' : '#38bdf8') : (isEven ? '#ea580c' : '#fb923c');
+        const stroke = isBlue ? '#0369a1' : '#c2410c';
+
+        let targetTipX, targetTipY, targetAngle;
+        if (isBlue) {
+          targetTipX = startX + i * baseW + baseW / 2;
+          targetTipY = cy + R / 2;
+          targetAngle = -Math.PI / 2;
+        } else {
+          const bIdx = i - N / 2;
+          targetTipX = startX + bIdx * baseW + baseW;
+          targetTipY = cy - R / 2;
+          targetAngle = Math.PI / 2;
+        }
+
+        const curTipX = cx + (targetTipX - cx) * p;
+        const curTipY = cy + (targetTipY - cy) * p;
+        const curAngle = origAngle + dTheta / 2 + (targetAngle - (origAngle + dTheta / 2)) * p;
+
+        drawAreaSector(areaCtx, curTipX, curTipY, R, curAngle - dTheta / 2, curAngle + dTheta / 2, color, stroke);
+      }
+
+      if (p < 0.45) {
+        const alpha = Math.max(0, 1 - p / 0.4);
+        areaCtx.save();
+        areaCtx.globalAlpha = alpha;
+
+        areaCtx.beginPath();
+        areaCtx.arc(cx, cy, R + 4, -Math.PI / 2, Math.PI / 2);
+        areaCtx.lineWidth = 4;
+        areaCtx.strokeStyle = '#0284c7'; // 파란색
+        areaCtx.stroke();
+
+        [ -Math.PI / 2, Math.PI / 2 ].forEach(ang => {
+          areaCtx.beginPath();
+          areaCtx.arc(cx + Math.cos(ang) * (R + 4), cy + Math.sin(ang) * (R + 4), 4, 0, Math.PI * 2);
+          areaCtx.fillStyle = '#0284c7';
+          areaCtx.fill();
+        });
+
+        const badgeY = cy - R - 20;
+        const text = "원주의 절반";
+        areaCtx.font = "bold 13px Noto Sans KR, sans-serif";
+        const tw = areaCtx.measureText(text).width;
+
+        areaCtx.fillStyle = "#0284c7";
+        areaCtx.beginPath();
+        if (areaCtx.roundRect) {
+          areaCtx.roundRect(cx + (R * 0.5) - tw / 2 - 8, badgeY - 12, tw + 16, 24, 6);
+        } else {
+          areaCtx.rect(cx + (R * 0.5) - tw / 2 - 8, badgeY - 12, tw + 16, 24);
+        }
+        areaCtx.fill();
+
+        areaCtx.fillStyle = "#ffffff";
+        areaCtx.textAlign = "center";
+        areaCtx.textBaseline = "middle";
+        areaCtx.fillText(text, cx + (R * 0.5), badgeY);
+
+        areaCtx.beginPath();
+        areaCtx.moveTo(cx, cy);
+        areaCtx.lineTo(cx, cy - R);
+        areaCtx.lineWidth = 3.5;
+        areaCtx.strokeStyle = '#ef4444'; // 빨간색
+        areaCtx.stroke();
+
+        areaCtx.beginPath();
+        areaCtx.arc(cx, cy, 5, 0, Math.PI * 2);
+        areaCtx.fillStyle = '#ef4444';
+        areaCtx.fill();
+
+        const rLabel = "반지름";
+        areaCtx.font = "bold 12px Noto Sans KR, sans-serif";
+        const rtw = areaCtx.measureText(rLabel).width;
+        const rBoxX = cx - rtw - 16;
+        const rBoxY = cy - R * 0.5;
+
+        areaCtx.save();
+        areaCtx.fillStyle = "#ffffff";
+        areaCtx.shadowColor = "rgba(0, 0, 0, 0.18)";
+        areaCtx.shadowBlur = 4;
+        areaCtx.beginPath();
+        if (areaCtx.roundRect) {
+          areaCtx.roundRect(rBoxX, rBoxY - 11, rtw + 12, 22, 4);
+        } else {
+          areaCtx.rect(rBoxX, rBoxY - 11, rtw + 12, 22);
+        }
+        areaCtx.fill();
+
+        areaCtx.lineWidth = 1.5;
+        areaCtx.strokeStyle = "#ef4444";
+        areaCtx.stroke();
+
+        areaCtx.fillStyle = "#dc2626";
+        areaCtx.textAlign = "center";
+        areaCtx.textBaseline = "middle";
+        areaCtx.fillText(rLabel, rBoxX + (rtw + 12) / 2, rBoxY);
+        areaCtx.restore();
+
+        areaCtx.restore();
+      }
+
+      if (p > 0.4) {
+        areaCtx.save();
+        areaCtx.globalAlpha = Math.min(1, (p - 0.4) / 0.6);
+
+        const leftX = startX;
+        const rightX = startX + totalW;
+        const topY = cy - R / 2;
+        const botY = cy + R / 2;
+
+        drawDimArrow(areaCtx, rightX + 22, botY, rightX + 22, topY, '세로 = 반지름', '#ef4444');
+        drawDimArrow(areaCtx, leftX, topY - 24, rightX, topY - 24, '가로 = 원주의 절반 (반지름 × 3.14)', '#0284c7');
+
+        areaCtx.restore();
+      }
+    }
+
+    /* 2. 직각삼각형 변형 렌더링 */
+    function renderTriangleMode(W, H) {
+      const maxRByWidth = (W - 90) / 7.6;
+      const maxRByHeight = (H - 120) / 2.2;
+      const R = Math.max(25, Math.min(maxRByWidth, maxRByHeight, 80));
+
+      const circleX = Math.max(70, W * 0.16);
+      const circleY = H * 0.44;
+      const bottomY = circleY + R;
+      const maxBaseW = 2 * Math.PI * R;
+      const K = Math.min(triLayers, 32);
+      const p = areaProgress;
+
+      const currentRollR = R * Math.max(0, 1 - Math.pow(p, 0.85));
+      const rollAlpha = p > 0.8 ? Math.max(0, (1 - p) / 0.2) : 1.0;
+
+      if (currentRollR > 1.5 && rollAlpha > 0.01) {
+        areaCtx.save();
+        areaCtx.globalAlpha = rollAlpha;
+
+        areaCtx.beginPath();
+        areaCtx.arc(circleX, circleY, currentRollR, 0, Math.PI * 2);
+        areaCtx.fillStyle = '#ea580c';
+        areaCtx.fill();
+        areaCtx.lineWidth = 1.5;
+        areaCtx.strokeStyle = '#c2410c';
+        areaCtx.stroke();
+
+        areaCtx.lineWidth = 1.2;
+        for (let r = 3; r <= currentRollR - 1.5; r += 2.5) {
+          areaCtx.beginPath();
+          areaCtx.arc(circleX, circleY, r, 0, Math.PI * 2);
+          areaCtx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
+          areaCtx.stroke();
+        }
+        areaCtx.restore();
+      }
+
+      areaCtx.save();
+      areaCtx.beginPath();
+      areaCtx.moveTo(circleX, circleY);
+      areaCtx.lineTo(circleX, bottomY);
+      areaCtx.lineWidth = 8;
+      areaCtx.lineCap = 'round';
+      areaCtx.strokeStyle = '#0f172a';
+      areaCtx.stroke();
+
+      if (p < 0.25) {
+        areaCtx.save();
+        areaCtx.globalAlpha = Math.max(0, 1 - p / 0.25) * 0.6;
+        areaCtx.beginPath();
+        areaCtx.moveTo(circleX + R, circleY + 5);
+        areaCtx.lineTo(circleX + R, bottomY);
+        areaCtx.lineWidth = 2;
+        areaCtx.strokeStyle = '#94a3b8';
+        areaCtx.stroke();
+        areaCtx.restore();
+      }
+      areaCtx.restore();
+
+      const strandThickness = Math.max(4, Math.min(8, (R / K) * 0.85));
+      const spacing = R / K;
+
+      areaCtx.save();
+      areaCtx.lineCap = 'round';
+      areaCtx.lineWidth = strandThickness;
+
+      for (let k = 1; k <= K; k++) {
+        const ringR = (k / K) * R;
+        const ringCirc = 2 * Math.PI * ringR;
+        const strandY = circleY + (k * spacing) - (spacing * 0.3);
+
+        const staggerOrder = (K - k) / Math.max(1, K - 1);
+        const delayStart = staggerOrder * 0.45;
+        const span = 0.55;
+
+        let localP = 0;
+        if (p > delayStart) {
+          localP = Math.min(1.0, (p - delayStart) / span);
+          localP = localP * localP * (3 - 2 * localP);
+        }
+
+        if (localP > 0.002) {
+          const curW = ringCirc * localP;
+
+          areaCtx.beginPath();
+          areaCtx.moveTo(circleX + 4, strandY);
+          areaCtx.lineTo(circleX + 4 + curW, strandY);
+          areaCtx.strokeStyle = '#ef4444';
+          areaCtx.stroke();
+        }
+      }
+      areaCtx.restore();
+
+      if (p > 0.35) {
+        areaCtx.save();
+        areaCtx.globalAlpha = Math.min(1, (p - 0.35) / 0.65);
+
+        drawDimArrow(areaCtx, circleX - 22, bottomY, circleX - 22, circleY, '높이 = 반지름', '#ef4444');
+
+        const curBaseW = maxBaseW * p;
+        drawDimArrow(areaCtx, circleX, bottomY + 24, circleX + curBaseW, bottomY + 24, '밑변 = 원의 둘레 (지름 × 3.14)', '#0284c7');
+
+        if (p > 0.85) {
+          areaCtx.setLineDash([4, 4]);
+          areaCtx.strokeStyle = '#64748b';
+          areaCtx.lineWidth = 2;
+          areaCtx.beginPath();
+          areaCtx.moveTo(circleX + 4, circleY + spacing);
+          areaCtx.lineTo(circleX + 4 + maxBaseW, bottomY);
+          areaCtx.stroke();
+          areaCtx.setLineDash([]);
+        }
+
+        areaCtx.restore();
+      }
+    }
+
+    function drawAreaSector(ctx, tipX, tipY, r, startA, endA, fill, stroke) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.arc(tipX, tipY, r, startA, endA);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.lineWidth = 1.0;
+      ctx.strokeStyle = stroke;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawDimArrow(ctx, x1, y1, x2, y2, label, color) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+
+      ctx.font = 'bold 12px Noto Sans KR, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2;
+      const textW = ctx.measureText(label).width;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(midX - textW / 2 - 4, midY - 9, textW + 8, 18);
+      ctx.fillStyle = color;
+      ctx.fillText(label, midX, midY);
+      ctx.restore();
+    }
+
+    function updateAreaFormula() {
+      const bar = document.getElementById('area-formula-bar');
+      if (!bar) return;
+      if (areaMode === 'rect') {
+        bar.innerHTML = `
+          <span>직사각형 넓이 =</span>
+          <span class="text-sky-400 font-bold">가로 (원주의 절반)</span>
+          <span>×</span>
+          <span class="text-rose-400 font-bold">세로 (반지름)</span>
+          <span>=</span>
+          <span class="text-emerald-400 font-black text-sm sm:text-base">반지름 × 반지름 × 3.14</span>
+        `;
+      } else {
+        bar.innerHTML = `
+          <span>직각삼각형 넓이 =</span>
+          <span>½ ×</span>
+          <span class="text-sky-400 font-bold">밑변 (원의 둘레)</span>
+          <span>×</span>
+          <span class="text-rose-400 font-bold">높이 (반지름)</span>
+          <span>=</span>
+          <span class="text-emerald-400 font-black text-sm sm:text-base">반지름 × 반지름 × 3.14</span>
+        `;
+      }
+    }
+
+    /* -------------------------------------------------------------
+     * [5] 초기화 & ResizeObserver 등록
+     * ------------------------------------------------------------- */
+    function initAll() {
+      buildSliceButtons();
+      refreshPiCanvas();
+
+      if (savedCircles.length === 0) {
+        savedCircles.push({
+          id: 1,
+          diameter: 10.0,
+          circumference: "31.4",
+          steps: 4
+        });
+      }
+      updateTrayUI();
+
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => {
+          if (currentTab === 'pi') {
+            resizePiCanvas();
+            renderPi();
+          } else {
+            resizeAreaCanvas();
+            renderArea();
+          }
+        });
+        const wrapPi = document.getElementById('pi-canvas-wrapper');
+        const wrapArea = document.getElementById('area-canvas-wrapper');
+        if (wrapPi) ro.observe(wrapPi);
+        if (wrapArea) ro.observe(wrapArea);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', initAll);
+    window.addEventListener('load', initAll);
+
+    window.addEventListener('resize', () => {
+      if (currentTab === 'pi') {
+        resizePiCanvas();
+        renderPi();
+      } else {
+        resizeAreaCanvas();
+        renderArea();
+      }
+    });
+  </script>
+</body>
+</html>
